@@ -62,7 +62,6 @@ class Guild {
                 interaction.reply("No existing Channel " + this.warChannel)
             }
         });
-
     }
 
     handleStartWar(interaction) {
@@ -85,7 +84,30 @@ class Guild {
                 interaction.reply("No existing Channel " + this.warChannel)
             }
         });
+    }
 
+
+
+    handleOngoingWar(interaction) {
+        this.getFirstChannelFromName(this.warChannel).then((warChannel) => {
+            if (warChannel) {
+                if (warChannel.type === ChannelType.GuildVoice) {
+                    if (!warChannel.permissionsFor(interaction.guild.members.me).has([
+                        PermissionsBitField.Flags.Speak,
+                        PermissionsBitField.Flags.Connect
+                    ])) {
+                        interaction.reply(`Missing permissions to speak and/or join in ${this.warChannel}`)
+                        return;
+                    }
+                    this.ongoingWar(interaction, interaction.options.data[0].value);
+                } else {
+                    interaction.reply("Channel " + this.warChannel + " is not a voice channel")
+                }
+
+            } else {
+                interaction.reply("No existing Channel " + this.warChannel)
+            }
+        });
     }
 
     startWar(msg, time) {
@@ -94,7 +116,7 @@ class Guild {
             msg.reply(time + " is not a valid time. Type /help for a list of commands")
             return;
         }
-        const current = new Date()
+        const current = new Date();
         const warStartMillis = new Date(current.getFullYear(), current.getMonth(), current.getDate(), current.getHours(), current.getMinutes() + parseInt(timeArgs[0]), current.getSeconds() + parseInt(timeArgs[1])).getTime();
         if (this.checkForCollidingTimers(warStartMillis)) {
             msg.reply(time + " collides with a different war. !leaveWar the current war or use /list and /unschedule-war unwanted wars.")
@@ -104,6 +126,30 @@ class Guild {
         this.startTimerWarMap.set(warStartMillis - this.timeZone, war);
         this.incrementWars();
         msg.reply("The war starts in " + time + "(mm:ss)")
+    }
+
+    ongoingWar(msg, time) {
+        const timeArgs = time.split(":");
+        if (!validateTimeArgsMinuteSeconds(timeArgs)) {
+            msg.reply(time + " is not a valid time. Type /help for a list of commands")
+            return;
+        }
+
+        const timeSeconds = parseInt(timeArgs[0]) * 60 + parseInt(timeArgs[1]);
+        const timeElapsed = 30 * 60 - timeSeconds;
+        const minsElapsed = Math.floor(timeElapsed / 60);
+        const secondsElapsed = timeElapsed % 60;
+
+        const current = new Date();
+        const warStartMillis = new Date(current.getFullYear(), current.getMonth(), current.getDate(), current.getHours(), current.getMinutes() - minsElapsed, current.getSeconds() - secondsElapsed).getTime();
+        if (this.checkForCollidingTimers(warStartMillis)) {
+            msg.reply(time + " collides with a different war. !leaveWar the current war or use /list and /unschedule-war unwanted wars.")
+            return;
+        }
+        const war = new War(this, msg, warStartMillis, this.startCallback, this.leaveCallback);
+        this.startTimerWarMap.set(warStartMillis - this.timeZone, war);
+        this.incrementWars();
+        msg.reply("The war is ongoing: " + time + "(mm:ss)")
     }
 
     scheduleWar(msg, time) {
